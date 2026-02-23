@@ -7,6 +7,7 @@ library(Seurat)
 library(ggplot2)
 library(patchwork)
 library(viridis)
+library(dplyr)
 
 #Load seurat object RDS
 all_samples_integrated <- readRDS("/data/gpfs/projects/punim1901/flames_v2/seurat_workspace/all_samples_integrated.rds")
@@ -107,3 +108,40 @@ all_samples_integrated <- readRDS("/data/gpfs/projects/punim1901/flames_v2/seura
     p4 <- DimPlot(all_samples_integrated, reduction="umap", group.by = "seurat_clusters")
     
     (p1 + p2 + p3 + p4) + plot_layout(ncol = 4)
+
+
+
+###Heatmap of top 10 genes per cluster across resolutions
+    #Define the resolutions you want to test
+    resolutions <- c(0.2, 0.25, 0.3)
+    
+    #Store heatmaps in a list
+    heatmap_list <- list()
+    
+    for (res in resolutions) {
+      
+      #Re-cluster at this resolution
+      all_samples_integrated <- FindClusters(all_samples_integrated, resolution = res)
+      
+      #Find all markers for this clustering
+      markers <- FindAllMarkers(all_samples_integrated, assay = "RNA", 
+                                logfc.threshold = 0.585, min.pct = 0.2, only.pos = FALSE) %>% 
+                                filter(p_val_adj < 0.05)
+      
+      #Select top 10 genes per cluster (positive logFC > 1)
+      top_genes <- markers %>%
+        group_by(cluster) %>%
+        filter(avg_log2FC > 1) %>%
+        slice_head(n = 10) %>%
+        ungroup()
+      
+      #Generate heatmap
+      hm <- DoHeatmap(all_samples_integrated, features = top_genes$gene, assay = "RNA") +
+        ggtitle(paste0("Resolution ", res)) +
+        theme(text = element_text(size = 14))
+      
+      #Store in list
+      heatmap_list[[paste0("res_", res)]] <- hm}
+    
+    #Combine plots (optional, adjust layout as needed)
+    wrap_plots(heatmap_list, ncol = 3)
